@@ -13,11 +13,10 @@ def explode_epub(path: Path):
     assert path.suffix.lower() == ".epub"
     new_path = path.parent / f"{path.stem}_edit{path.suffix}"
 
-    compress_info = {}
+    compress_info: dict[str, zipfile.ZipInfo] = {}
     with tempfile.TemporaryDirectory() as temp_dir:
         with zipfile.ZipFile(path, 'r') as zip_ref:
-            for f in zip_ref.filelist:
-                compress_info[f.filename] = f
+            compress_info = zip_ref.NameToInfo
             zip_ref.extractall(temp_dir)
 
         yield temp_dir
