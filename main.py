@@ -5,9 +5,8 @@ import os
 import contextlib
 from typing import Generator
 import argparse
-
-
-CURR_DIR = Path(__file__).resolve().parent
+import cleaner
+from functools import partial
 
 
 def walk(path: Path) -> Generator[Path, None, None]:
@@ -18,10 +17,10 @@ def walk(path: Path) -> Generator[Path, None, None]:
 
 
 @contextlib.contextmanager
-def explode_epub(path: Path):
+def explode_epub(path: Path, output_path: Path|None=None):
     assert path.exists()
     assert path.suffix.lower() == ".epub"
-    new_path = path.parent / f"{path.stem}_edit{path.suffix}"
+    new_path = output_path or path.parent / f"{path.stem}_edit{path.suffix}"
 
     with tempfile.TemporaryDirectory() as temp_dir:
         with zipfile.ZipFile(path, 'r') as zip_ref:
@@ -50,24 +49,52 @@ def explode_epub(path: Path):
 
 def valid_epub_file(path_str) -> Path:
     path = Path(path_str).resolve()
+
     if not path.exists():
         raise argparse.ArgumentTypeError(f"Invalid path: {path_str}")
+
+    return valid_is_epub(path)
+
+
+def valid_is_epub(path_str: str|Path) -> Path:
+    path = Path(path_str).resolve()
+
     if path.suffix.lower() != ".epub":
         raise argparse.ArgumentTypeError(f"File must have an 'epub' extension. '{path_str}'")
+
     return path
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("path", type=valid_epub_file, help="path to an epub")
+    parser.add_argument("-o", "--output", type=valid_is_epub, default=None, help="output file name")
     args = parser.parse_args()
 
-    with explode_epub(args.path) as epub_dir:
-        html_files = (f for f in walk(epub_dir) if "html" in f.suffix)
+    with explode_epub(args.path, args.output) as epub_dir:
+        all_text = ""
+        html_files = [f for f in walk(epub_dir) if "html" in f.suffix]
         for file_path in html_files:
             content = file_path.read_text()
-            if "fuck" in content:
-                open(file_path, "w").write(content.replace("fuck", "BEEP"))
+            all_text += content
+
+        replacement_list = cleaner.language_check(all_text)
+        for file_path in html_files:
+            text = file_path.read_text()
+            output = ""
+            for line in text.splitlines():
+                # Go through all elements of replacement_list
+                for search, sub, pcase in replacement_list:
+                    if pcase:  # Preserve case
+                        line = search.sub(partial(pcase, sub), line)
+                    else:  # Don't preserve case
+                        line = search.sub(sub, line)
+                output += line + "\n"
+            if text.replace('\n', "") == output.replace('\n', ''):
+                print(f"Cleaned:   '{file_path}'")
+            else:
+                print(f"Unchanged: '{file_path}'")
+            file_path.write_text(output)
 
 
 if __name__ == "__main__":
