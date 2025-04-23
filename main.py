@@ -1,12 +1,12 @@
-from pathlib import Path
-import zipfile
-import tempfile
-import os
-import contextlib
-from typing import Generator
 import argparse
 import cleaner
+import contextlib
+import os
+import tempfile
+import zipfile
 from functools import partial
+from pathlib import Path
+from typing import Generator
 
 
 def walk(path: Path) -> Generator[Path, None, None]:
